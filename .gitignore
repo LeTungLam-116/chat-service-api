@@ -1,0 +1,23 @@
+# .NET Core
+bin/
+obj/
+TestResults/
+logs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# React / Node.js
+chat-web-client/node_modules/
+chat-web-client/dist/
+chat-web-client/dist-ssr/
+chat-web-client/.env.local
+chat-web-client/.env.*.local
+
+# Visual Studio
+.vs/
+
+# Mac / Windows temp files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,160 @@
+/* Bộ Giao Diện Glassmorphism Nhức Nách Của Các Startup */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --primary: #0084ff;
+  --bg-gradient: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+  --glass-bg: rgba(255, 255, 255, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.4);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', sans-serif;
+}
+
+body {
+  background: var(--bg-gradient);
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* === MÀN HÌNH CHÀO (ĐĂNG NHẬP GOOGLE) === */
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  width: 100vw;
+}
+
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  padding: 40px;
+  border-radius: 24px;
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+  text-align: center;
+  width: 350px;
+}
+.glass-card h1 { font-size: 28px; color: #1a1a1a; margin-bottom: 5px; }
+.glass-card p { color: #666; font-size: 14px; margin-bottom: 25px; }
+.google-btn-wrapper { display: flex; justify-content: center; }
+
+/* === BỘ KHUNG APP CHUNG === */
+.chat-container {
+  display: flex;
+  width: 90vw;
+  max-width: 1200px;
+  height: 85vh;
+  gap: 20px;
+}
+
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  border-radius: 24px;
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ==== BÊN TRÁI: DANH BẠ ==== */
+.sidebar { width: 320px; flex-shrink: 0; }
+.my-profile {
+  padding: 24px; display: flex; align-items: center; gap: 15px;
+  border-bottom: 1px solid rgba(0,0,0,0.05); background: rgba(255,255,255,0.4);
+}
+.my-profile img {
+  width: 50px; height: 50px; border-radius: 50%; border: 2px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+.my-profile h2 { font-size: 16px; color: #111; margin-bottom: 2px; }
+.online-status { font-size: 12px; color: #00b341; font-weight: 500; }
+.copy-id {
+  font-size: 11px; color: #777; cursor: pointer; margin-top: 4px; text-decoration: underline; background: #eee; padding: 2px 5px; border-radius: 4px;
+}
+.copy-id:hover { color: var(--primary); }
+
+.search-box {
+  padding: 15px 20px;
+  background: rgba(255,255,255,0.2);
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+.search-box input {
+  width: 100%; padding: 10px 15px; border-radius: 20px; border: 1px solid rgba(0,0,0,0.1);
+  background: rgba(255,255,255,0.8); outline: none; font-size: 13px;
+}
+.search-box input:focus { box-shadow: 0 0 0 2px rgba(0,132,255,0.2); }
+
+.inbox-list {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+}
+.inbox-item {
+  display: flex; gap: 12px; padding: 15px 20px; cursor: pointer; transition: background 0.2s;
+  border-bottom: 1px solid rgba(0,0,0,0.03); align-items: center;
+}
+.inbox-item:hover { background: rgba(0,132,255,0.05); }
+.inbox-item img {
+  width: 45px; height: 45px; border-radius: 50%; object-fit: cover; border: 1px solid #eee;
+}
+.inbox-info { flex: 1; overflow: hidden; }
+.inbox-name { font-weight: 600; font-size: 14px; color: #222; margin-bottom: 3px; }
+.inbox-preview { font-size: 12px; color: #777; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ==== BÊN PHẢI: KHUNG ĐẤU KHẨU ==== */
+.chat-area { flex: 1; }
+.chat-header {
+  padding: 20px 24px; background: rgba(255,255,255,0.4); border-bottom: 1px solid rgba(0,0,0,0.05);
+  font-weight: 600; color: #222; font-size: 16px;
+}
+
+.messages-list {
+  flex: 1; padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;
+}
+
+.msg-bubble {
+  max-width: 65%; padding: 12px 16px; border-radius: 18px; font-size: 15px; line-height: 1.4;
+  position: relative; box-shadow: 0 2px 5px rgba(0,0,0,0.05); animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Tin của Mình Xanh bên phải */
+.msg-bubble.mine {
+  align-self: flex-end; background: var(--primary); color: white; border-bottom-right-radius: 4px;
+}
+/* Tin của Nhỏ kia Trắng bên trái */
+.msg-bubble.theirs {
+  align-self: flex-start; background: white; color: #222; border-bottom-left-radius: 4px;
+}
+
+.msg-time { font-size: 10px; margin-top: 5px; opacity: 0.7; text-align: right; }
+
+/* Khu vực gõ chữ */
+.chat-input-area {
+  padding: 16px 24px; background: rgba(255,255,255,0.5); border-top: 1px solid rgba(0,0,0,0.05);
+  display: flex; gap: 12px;
+}
+
+.chat-input-area input {
+  flex: 1; padding: 14px 20px; border-radius: 30px; border: 1px solid rgba(0,0,0,0.1);
+  background: white; outline: none; font-size: 15px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+}
+.chat-input-area input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0,132,255,0.1); }
+
+.chat-input-area button {
+  background: var(--primary); color: white; border: none; padding: 0 24px; border-radius: 30px;
+  font-weight: 600; cursor: pointer; transition: all 0.2s;
+}
+.chat-input-area button:hover { background: #0070d9; transform: translateY(-1px); }
