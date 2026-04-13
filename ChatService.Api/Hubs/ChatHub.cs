@@ -5,6 +5,7 @@ using ChatService.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using System.Linq;
 
 namespace ChatService.Api.Hubs
 {
@@ -30,8 +31,16 @@ namespace ChatService.Api.Hubs
             {
                 var isFirstDevice = await _tracker.AddConnection(userId, Context.ConnectionId);
                 
-                // Cải tiến Đỉnh Cao: Chỉ sủa thông báo "Online" DUY NHẤT khi nó Mở máy đầu tiên.
-                // Mở máy 2 thì Im lặng. Nhờ vậy chặn Spam sập màn hình thiên hạ.
+                // MỚI [Phase 5]: Quét CSDL xem nó Thuộc những Băng Đảng (Groups) nào thì Tự Động đẩy ống nghe (ConnectionId) cho nó nghe lén toàn bộ!
+                var myGroups = await _context.GroupMembers
+                    .Where(gm => gm.UserId == userId && gm.IsPendingApproval == false)
+                    .Select(gm => gm.GroupId)
+                    .ToListAsync();
+                foreach (var gId in myGroups)
+                {
+                    await Groups.AddToGroupAsync(Context.ConnectionId, gId);
+                }
+
                 if (isFirstDevice)
                 {
                     await Clients.Others.SendAsync("UserCameOnline", userId);
@@ -60,11 +69,11 @@ namespace ChatService.Api.Hubs
             await base.OnDisconnectedAsync(exception);
         }
 
-        public async Task SendMessageToUser(string receiverId, string messageContent)
+        public async Task<ChatMessage?> SendMessageToUser(string receiverId, string messageContent)
         {
             var senderId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value 
                           ?? Context.User?.FindFirst("sub")?.Value;
-            if (string.IsNullOrEmpty(senderId)) return;
+            if (string.IsNullOrEmpty(senderId)) return null;
 
             // 1. Lưu CSDL Vĩnh Viễn
             var chatMessage = new ChatMessage
@@ -81,58 +90,103 @@ namespace ChatService.Api.Hubs
             var receiverConnections = await _tracker.GetConnectionsForUser(receiverId);
             if (receiverConnections.Length > 0)
             {
-                await Clients.Clients(receiverConnections).SendAsync("ReceivePrivateMessage", senderId, messageContent, chatMessage.SentAt);
+                await Clients.Clients(receiverConnections).SendAsync("ReceivePrivateMessage", chatMessage.Id, senderId, messageContent, chatMessage.SentAt, chatMessage.IsRevoked, chatMessage.IsRead);
             }
             
             // 3. Phản pháo về mọi Thiết bị của chính MÌNH (Send từ Phone -> Hiện cả Inbox của Laptop) do đồng bộ State
             var senderConnections = await _tracker.GetConnectionsForUser(senderId);
             if (senderConnections.Length > 0)
             {
-                await Clients.Clients(senderConnections).SendAsync("ReceivePrivateMessage", senderId, messageContent, chatMessage.SentAt);
+                await Clients.Clients(senderConnections).SendAsync("ReceivePrivateMessage", chatMessage.Id, senderId, messageContent, chatMessage.SentAt, chatMessage.IsRevoked, chatMessage.IsRead);
             }
+
+            return chatMessage;
+        }
+
+        // === TÍNH NĂNG [THU HỒI TIN NHẮN] ===
+        public async Task RevokeMessage(Guid messageId)
+        {
+            var myId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value 
+                          ?? Context.User?.FindFirst("sub")?.Value;
+            
+            var msg = await _context.ChatMessages.FindAsync(messageId);
+            if (msg == null || msg.SenderId != myId) return; // Kháng lỗi Hacker: Chỉ cho phép thu hồi tin của chính mình
+
+            msg.IsRevoked = true;
+            await _context.SaveChangesAsync();
+
+            // Phát lệnh thu hồi sang TẤT CẢ thiết bị của mình & đối phương
+            var receivers = await _tracker.GetConnectionsForUser(msg.ReceiverId!);
+            var senders = await _tracker.GetConnectionsForUser(msg.SenderId);
+            var allConnections = receivers.Concat(senders).ToArray();
+            
+            if (allConnections.Length > 0)
+                await Clients.Clients(allConnections).SendAsync("MessageRevoked", messageId);
+        }
+
+        // === TÍNH NĂNG [ĐÃ XEM] ===
+        public async Task MarkAsRead(Guid messageId, string senderOfMessageId)
+        {
+            var myId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value 
+                          ?? Context.User?.FindFirst("sub")?.Value;
+
+            var msg = await _context.ChatMessages.FindAsync(messageId);
+            if (msg == null || msg.ReceiverId != myId) return; // Kháng lỗi: Chỉ update khi mình là Thằng Nhận
+            
+            msg.IsRead = true;
+            await _context.SaveChangesAsync();
+
+            // Bắn tia "Đã xem" ngược về thiết bị của Người Gửi (Báo nó biết là dòng này đã bị Seen!)
+            var senderConnections = await _tracker.GetConnectionsForUser(senderOfMessageId);
+            if (senderConnections.Length > 0)
+                await Clients.Clients(senderConnections).SendAsync("MessageRead", messageId);
+        }
+
+        // === TÍNH NĂNG [ĐANG GÕ...] ===
+        public async Task TypingToggled(string receiverId, bool isTyping)
+        {
+            var myId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value 
+                          ?? Context.User?.FindFirst("sub")?.Value;
+                          
+            var receiverConnections = await _tracker.GetConnectionsForUser(receiverId);
+            if (receiverConnections.Length > 0)
+                await Clients.Clients(receiverConnections).SendAsync("UserTyping", myId, isTyping);
         }
 
         // === TÍNH NĂNG CHAT NHÓM (GROUP CHAT) ===
 
-        // 1. Gia nhập Nhóm
-        public async Task JoinGroup(string groupName)
-        {
-            // SignalR có sẵn lõi Quản lý Nhóm siêu tốc, ép Ống Nước này thuộc về 1 Group
-            await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
-            
-            var senderId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "Ai đó";
-            await Clients.Group(groupName).SendAsync("ReceiveGroupMessage", groupName, "Hệ Thống", $"{senderId} đã bay vào phòng!");
-        }
+        // 1. Gia nhập Nhóm: Không xài nữa vì đã Bê sang DB quản lý, lúc OnConnected nó tự nhận!
+        public async Task JoinGroupFallback(string groupName) { await Task.CompletedTask; }
 
-        // 2. Rời Nhóm
-        public async Task LeaveGroup(string groupName)
-        {
-            var senderId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "Ai đó";
-            await Clients.Group(groupName).SendAsync("ReceiveGroupMessage", groupName, "Hệ Thống", $"{senderId} đã chuồn khỏi Nhóm!");
-            
-            await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
-        }
+        public async Task LeaveGroupFallback(string groupName) { await Task.CompletedTask; }
 
         // 3. Bắn tin nhắn chùm (Broadcast) vào toàn bộ những ai đang trong Room
-        public async Task SendMessageToGroup(string groupName, string messageContent)
+        public async Task<ChatMessage?> SendMessageToGroup(string groupName, string messageContent)
         {
             var senderId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value 
                           ?? Context.User?.FindFirst("sub")?.Value;
-            if (string.IsNullOrEmpty(senderId)) return;
+            if (string.IsNullOrEmpty(senderId)) return null;
+
+            // Vành Đai Mới: Quét DB xem có đúng nó là Môn đệ của Bang chúa không? Kẻo hacker fake lệnh!
+            var isMember = await _context.GroupMembers.AnyAsync(gm => gm.GroupId == groupName && gm.UserId == senderId && gm.IsPendingApproval == false);
+            if (!isMember) return null;
+
+            var user = await _context.Users.FindAsync(senderId);
 
             // Lưu Database vĩnh viễn
             var chatMessage = new ChatMessage
             {
                 SenderId = senderId,
-                GroupName = groupName, // Ghi nhận ID của Nhóm thay vì Receiver cá nhân
+                GroupName = groupName,
                 Content = messageContent,
                 SentAt = DateTime.UtcNow
             };
             _context.ChatMessages.Add(chatMessage);
             await _context.SaveChangesAsync();
 
-            // Sức mạnh lớn nhất của SignalR: Bơm tin 1 phát nảy đồng loạt hàng ngàn Client
-            await Clients.Group(groupName).SendAsync("ReceiveGroupMessage", groupName, senderId, messageContent, chatMessage.SentAt);
+            // Nhồi đủ thứ (Id, Tên, Avatar) bắn cho cả Lò cùng nghe
+            await Clients.Group(groupName).SendAsync("ReceiveGroupMessage", chatMessage.Id, groupName, senderId, user?.DisplayName ?? "Ai đó", user?.AvatarUrl ?? "", messageContent, chatMessage.SentAt, chatMessage.IsRevoked, chatMessage.IsRead);
+            return chatMessage;
         }
 
         // CHIÊU MÔN [2]: BÙ ĐẮP TIN NHẮN (HỒI PHỤC KHI ĐỨT CÁP)

@@ -71,6 +71,17 @@ namespace ChatService.Api.Controllers
                 .OrderByDescending(m => m.SentAt)
                 .Skip(skip)
                 .Take(take)
+                .Select(m => new {
+                    Id = m.Id,
+                    SenderId = m.SenderId,
+                    GroupName = m.GroupName,
+                    Content = m.Content,
+                    SentAt = m.SentAt,
+                    IsRevoked = m.IsRevoked,
+                    IsRead = m.IsRead,
+                    SenderName = _context.Users.Where(u => u.Id == m.SenderId).Select(u => u.DisplayName).FirstOrDefault() ?? "Ai đó...",
+                    SenderAvatar = _context.Users.Where(u => u.Id == m.SenderId).Select(u => u.AvatarUrl).FirstOrDefault() ?? ""
+                })
                 .ToListAsync();
 
             messages.Reverse();
