@@ -24,26 +24,31 @@ namespace ChatService.Api.Controllers
         {
             var myId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // Bác ấn thanh Search mà gõ rỗng, hệ thống Lôi đại 5 người online gần nhất vứt lên gợi ý!
-            if (string.IsNullOrWhiteSpace(q))
-            {
-                var randomRecent = await _context.Users
-                    .Where(u => u.Id != myId)
-                    .OrderByDescending(u => u.LastOnlineAt)
-                    .Take(5)
-                    .Select(u => new { id = u.Id, name = u.DisplayName, avatar = u.AvatarUrl })
-                    .ToListAsync();
-                return Ok(randomRecent);
-            }
-
-            // Gõ có chữ thì quét Tên Zalo hoặc Email
-            var users = await _context.Users
-                .Where(u => u.Id != myId && (u.DisplayName.Contains(q) || u.Email.Contains(q)))
+            // Quét Tên Zalo hoặc Email, kèm theo trạng thái móc nối với Bảng Kết Bạn
+            var rawUsers = await _context.Users
+                .Where(u => u.Id != myId && (string.IsNullOrWhiteSpace(q) || u.DisplayName.Contains(q) || u.Email.Contains(q)))
                 .Take(10)
-                .Select(u => new { id = u.Id, name = u.DisplayName, avatar = u.AvatarUrl })
                 .ToListAsync();
 
-            return Ok(users);
+            // Móc với Friendship DB để biết chúng nó đã Kết Bạn chưa hay Đang Đợi
+            var results = new List<object>();
+            foreach (var u in rawUsers)
+            {
+                var f = await _context.Friendships.FirstOrDefaultAsync(x => 
+                    (x.SenderId == myId && x.ReceiverId == u.Id) || 
+                    (x.SenderId == u.Id && x.ReceiverId == myId));
+
+                results.Add(new {
+                    id = u.Id,
+                    name = u.DisplayName,
+                    avatar = u.AvatarUrl,
+                    friendshipId = f?.Id ?? -1,
+                    friendStatus = f?.Status ?? -1, // -1: Người Lạ, 0: Chờ Duyệt, 1: Bạn Bè
+                    isSender = f?.SenderId == myId
+                });
+            }
+
+            return Ok(results);
         }
     }
 }

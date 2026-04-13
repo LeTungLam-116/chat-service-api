@@ -158,3 +158,56 @@ body {
   font-weight: 600; cursor: pointer; transition: all 0.2s;
 }
 .chat-input-area button:hover { background: #0070d9; transform: translateY(-1px); }
+
+/* TÍNH NĂNG ZALO LÕI PHASE 3 */
+.msg-bubble.revoked {
+    background: #e9ecef !important;
+    color: #6c757d !important;
+    font-style: italic;
+    border: 1px solid #dee2e6;
+    box-shadow: none;
+}
+.revoke-btn {
+    position: absolute; left: -65px; top: 10px;
+    background: rgba(255,0,0,0.1); color: red; border: none; padding: 4px 8px; border-radius: 10px; cursor: pointer; font-size: 11px;
+    opacity: 0; transition: opacity 0.2s;
+}
+.msg-bubble.mine:hover .revoke-btn { opacity: 1; }
+
+.read-receipt {
+    width: 14px; height: 14px; border-radius: 50%; position: absolute; right: -20px; bottom: 0;
+    border: 1px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.typing-indicator {
+    padding: 10px 20px; font-size: 13px; color: #888; font-style: italic;
+    animation: pulse 1s infinite alternate; align-self: flex-start;
+}
+@keyframes pulse { from { opacity: 0.5; } to { opacity: 1; } }
+
+.join-group-btn { display: none; } /* Hide old hardcoded btn */
+
+.sidebar-tabs { display: flex; width: 100%; border-bottom: 2px solid rgba(0,0,0,0.05); }
+.tab-btn { flex: 1; padding: 12px; text-align: center; font-weight: bold; cursor: pointer; color: #aaa; transition: 0.2s; font-size: 13px; }
+.tab-btn:hover { background: rgba(0,0,0,0.02); }
+.tab-btn.active { color: var(--primary); border-bottom: 3px solid var(--primary); }
+
+.add-friend-btn {
+    background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; border-radius: 5px; padding: 4px 8px; font-size: 10px; font-weight: bold; cursor: pointer; margin-left: auto;
+}
+.add-friend-btn:hover { background: #c8e6c9; }
+
+.contact-item:hover { background: rgba(0, 132, 255, 0.05); }
+
+.msg-row { display: flex; width: 100%; margin-bottom: 5px; }
+.msg-row.mine { justify-content: flex-end; }
+.msg-row.theirs { justify-content: flex-start; }
+.msg-row.system-row { justify-content: center; margin: 15px 0;}
+
+.group-avt { margin-right: 10px; align-self: flex-end; }
+.group-avt img { width: 30px; height: 30px; border-radius: 50%; border: 1px solid #ccc; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+
+.msg-bubble-container { display: flex; flex-direction: column; max-width: 65%; position: relative; }
+.msg-bubble-container .group-name { font-size: 11px; font-weight: bold; color: #555; margin-bottom: 4px; margin-left: 5px; opacity: 0.8; }
+
+.msg-bubble.system { background: rgba(0,0,0,0.08); color: #555; font-size: 11px; font-weight: bold; box-shadow: none; border: none; padding: 4px 15px; border-radius: 20px; text-align: center; }

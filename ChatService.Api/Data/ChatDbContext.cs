@@ -10,9 +10,17 @@ namespace ChatService.Api.Data
         public DbSet<AppUser> Users { get; set; }
         public DbSet<ChatMessage> ChatMessages { get; set; }
 
+        public DbSet<Friendship> Friendships { get; set; }
+        public DbSet<ChatGroup> ChatGroups { get; set; }
+        public DbSet<GroupMember> GroupMembers { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            // Chìa khoá ghép (Composite Key) cho bảng Trung gian Nhóm Chat
+            modelBuilder.Entity<GroupMember>()
+                .HasKey(gm => new { gm.GroupId, gm.UserId });
 
             // CHIÊU MÔN [1]: ĐÁNH INDEX (CHỈ MỤC) BỨT TỐC TÌM KIẾM
             // Báo SQL Server xếp các cột SenderId, ReceiverId và SentAt gọn gàng như Mục lục Sách giáo khoa.
