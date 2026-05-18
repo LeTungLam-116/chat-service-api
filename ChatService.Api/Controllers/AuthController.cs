@@ -1,4 +1,4 @@
-using ChatService.Api.Data;
+﻿using ChatService.Api.Data;
 using ChatService.Api.Models;
 using Google.Apis.Auth;
 using Microsoft.AspNetCore.Mvc;
@@ -33,20 +33,20 @@ namespace ChatService.Api.Controllers
         {
             try
             {
-                // Gọi API của Google để tra cứu xem ClientID có khớp không
+                // Gá»i API cá»§a Google Ä‘á»ƒ tra cá»©u xem ClientID cÃ³ khá»›p khÃ´ng
                 var settings = new GoogleJsonWebSignature.ValidationSettings()
                 {
                     Audience = new List<string> { _config["Google:ClientId"]! }
                 };
 
-                // Nhờ Google gỡ niêm phong cục Credential, moi ra Avatar, Email...
+                // Nhá» Google gá»¡ niÃªm phong cá»¥c Credential, moi ra Avatar, Email...
                 var payload = await GoogleJsonWebSignature.ValidateAsync(request.Credential, settings);
 
-                // Dùng Email làm thẻ căn cước tra DB mình xem thằng này từng chat chưa
+                // DÃ¹ng Email lÃ m tháº» cÄƒn cÆ°á»›c tra DB mÃ¬nh xem tháº±ng nÃ y tá»«ng chat chÆ°a
                 var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == payload.Email);
                 if (user == null)
                 {
-                    // Lần đầu vào Web -> Lập "hộ khẩu" Zalo tự động
+                    // Láº§n Ä‘áº§u vÃ o Web -> Láº­p "há»™ kháº©u" Zalo tá»± Ä‘á»™ng
                     user = new AppUser
                     {
                         GoogleId = payload.Subject,
@@ -59,7 +59,7 @@ namespace ChatService.Api.Controllers
                     await _context.SaveChangesAsync();
                 }
 
-                // Cấp Thẻ Bài JWT "Cây nhà lá vườn" để đi chơi khắp ngõ ngách SignalR
+                // Cáº¥p Tháº» BÃ i JWT "CÃ¢y nhÃ  lÃ¡ vÆ°á»n" Ä‘á»ƒ Ä‘i chÆ¡i kháº¯p ngÃµ ngÃ¡ch SignalR
                 var token = GenerateJwtToken(user);
 
                 return Ok(new
@@ -70,14 +70,14 @@ namespace ChatService.Api.Controllers
             }
             catch (InvalidJwtException)
             {
-                return BadRequest("Mã Google bị gian lận hoặc lậu khẩu!");
+                return BadRequest("MÃ£ Google bá»‹ gian láº­n hoáº·c láº­u kháº©u!");
             }
         }
 
         private string GenerateJwtToken(AppUser user)
         {
-            // Khoá này khớp y chang với cấu hình bên Program.cs
-            var secretKey = "REDACTED";
+            // KhoÃ¡ nÃ y khá»›p y chang vá»›i cáº¥u hÃ¬nh bÃªn Program.cs
+            var secretKey = _config["JwtSettings:SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey is not configured.");
             var tokenHandler = new JwtSecurityTokenHandler();
             var key = Encoding.UTF8.GetBytes(secretKey);
             
@@ -85,12 +85,12 @@ namespace ChatService.Api.Controllers
             {
                 Subject = new ClaimsIdentity(new[]
                 {
-                    // Quan Trọng Lõi: Nhét ID Database vào cột sống của Thẻ bài
+                    // Quan Trá»ng LÃµi: NhÃ©t ID Database vÃ o cá»™t sá»‘ng cá»§a Tháº» bÃ i
                     new Claim(ClaimTypes.NameIdentifier, user.Id), 
                     new Claim(ClaimTypes.Name, user.DisplayName),
                     new Claim(ClaimTypes.Email, user.Email),
                     new Claim("avatar", user.AvatarUrl),
-                    new Claim("sub", user.Id) // Fake sub cho SignalR cũ dễ nhận diện
+                    new Claim("sub", user.Id) // Fake sub cho SignalR cÅ© dá»… nháº­n diá»‡n
                 }),
                 Expires = DateTime.UtcNow.AddHours(2),
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
@@ -101,3 +101,4 @@ namespace ChatService.Api.Controllers
         }
     }
 }
+

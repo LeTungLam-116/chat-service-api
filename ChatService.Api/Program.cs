@@ -1,4 +1,4 @@
-using ChatService.Api.Data;
+﻿using ChatService.Api.Data;
 using ChatService.Api.Hubs;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -12,10 +12,10 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// TẠO TRÁI TIM THEO DÕI ONLINE TỰ ĐỘNG
+// Táº O TRÃI TIM THEO DÃ•I ONLINE Tá»° Äá»˜NG
 builder.Services.AddSingleton<ChatService.Api.Services.ConnectionTracker>();
 
-// 1. DATABASE CONFIG: Cấu hình lưu trữ xuống SQL Server thật
+// 1. DATABASE CONFIG: Cáº¥u hÃ¬nh lÆ°u trá»¯ xuá»‘ng SQL Server tháº­t
 builder.Services.AddDbContext<ChatDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -23,7 +23,7 @@ builder.Services.AddDbContext<ChatDbContext>(options =>
 builder.Services.AddSignalR(); 
 
 // 3. JWT AUTH CONFIG
-var secretKey = "REDACTED"; 
+var secretKey = builder.Configuration["JwtSettings:SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey is not configured."); 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -74,7 +74,7 @@ app.MapControllers();
 // 4. MAP HUB
 app.MapHub<ChatHub>("/chathub");
 
-// 5. MOCK TOKEN GENERATOR (Dùng riêng để cấp thẻ bài ra vô Giao diện Test)
+// 5. MOCK TOKEN GENERATOR (DÃ¹ng riÃªng Ä‘á»ƒ cáº¥p tháº» bÃ i ra vÃ´ Giao diá»‡n Test)
 app.MapGet("/generate-token", (string username) =>
 {
     var tokenHandler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
@@ -94,3 +94,4 @@ app.MapGet("/generate-token", (string username) =>
 });
 
 app.Run();
+
