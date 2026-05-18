@@ -1,4 +1,4 @@
-# .NET Core
+﻿# .NET Core
 bin/
 obj/
 TestResults/
@@ -7,6 +7,22 @@ logs/
 *.suo
 *.userosscache
 *.sln.docstates
+
+# ====== ASP.NET Core Secrets ======
+appsettings.Development.json
+appsettings.Production.json
+appsettings.Local.json
+appsettings.*.json
+!appsettings.json
+Properties/launchSettings.json
+
+# User secrets
+secrets.json
+*.secrets.json
+
+# Environment Variables
+.env
+.env.*
 
 # React / Node.js
 chat-web-client/node_modules/
@@ -17,6 +33,7 @@ chat-web-client/.env.*.local
 
 # Visual Studio
 .vs/
+.vscode/
 
 # Mac / Windows temp files
 .DS_Store
