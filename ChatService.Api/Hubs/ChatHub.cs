@@ -75,6 +75,9 @@ namespace ChatService.Api.Hubs
                           ?? Context.User?.FindFirst("sub")?.Value;
             if (string.IsNullOrEmpty(senderId)) return null;
 
+            // Kiểm duyệt nội dung tin nhắn tránh spam hoặc lỗi
+            if (string.IsNullOrWhiteSpace(messageContent) || messageContent.Length > 2000) return null;
+
             // 1. Lưu CSDL Vĩnh Viễn
             var chatMessage = new ChatMessage
             {
@@ -86,19 +89,9 @@ namespace ChatService.Api.Hubs
             _context.ChatMessages.Add(chatMessage);
             await _context.SaveChangesAsync();
 
-            // 2. Móc ống súng 2 nòng: Quét TẤT CẢ Tọa Độ (Điện thoại, IPad, Laptop) của Địch dập tin nhắn 1 lượt
-            var receiverConnections = await _tracker.GetConnectionsForUser(receiverId);
-            if (receiverConnections.Length > 0)
-            {
-                await Clients.Clients(receiverConnections).SendAsync("ReceivePrivateMessage", chatMessage.Id, senderId, messageContent, chatMessage.SentAt, chatMessage.IsRevoked, chatMessage.IsRead);
-            }
-            
-            // 3. Phản pháo về mọi Thiết bị của chính MÌNH (Send từ Phone -> Hiện cả Inbox của Laptop) do đồng bộ State
-            var senderConnections = await _tracker.GetConnectionsForUser(senderId);
-            if (senderConnections.Length > 0)
-            {
-                await Clients.Clients(senderConnections).SendAsync("ReceivePrivateMessage", chatMessage.Id, senderId, messageContent, chatMessage.SentAt, chatMessage.IsRevoked, chatMessage.IsRead);
-            }
+            // 2. Sử dụng SignalR built-in User để phát sóng đến toàn bộ thiết bị của người gửi & người nhận
+            await Clients.User(receiverId).SendAsync("ReceivePrivateMessage", chatMessage.Id, senderId, messageContent, chatMessage.SentAt, chatMessage.IsRevoked, chatMessage.IsRead);
+            await Clients.User(senderId).SendAsync("ReceivePrivateMessage", chatMessage.Id, senderId, messageContent, chatMessage.SentAt, chatMessage.IsRevoked, chatMessage.IsRead);
 
             return chatMessage;
         }
@@ -107,7 +100,7 @@ namespace ChatService.Api.Hubs
         public async Task RevokeMessage(Guid messageId)
         {
             var myId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value 
-                          ?? Context.User?.FindFirst("sub")?.Value;
+                           ?? Context.User?.FindFirst("sub")?.Value;
             
             var msg = await _context.ChatMessages.FindAsync(messageId);
             if (msg == null || msg.SenderId != myId) return; // Kháng lỗi Hacker: Chỉ cho phép thu hồi tin của chính mình
@@ -115,20 +108,19 @@ namespace ChatService.Api.Hubs
             msg.IsRevoked = true;
             await _context.SaveChangesAsync();
 
-            // Phát lệnh thu hồi sang TẤT CẢ thiết bị của mình & đối phương
-            var receivers = await _tracker.GetConnectionsForUser(msg.ReceiverId!);
-            var senders = await _tracker.GetConnectionsForUser(msg.SenderId);
-            var allConnections = receivers.Concat(senders).ToArray();
-            
-            if (allConnections.Length > 0)
-                await Clients.Clients(allConnections).SendAsync("MessageRevoked", messageId);
+            // Phát lệnh thu hồi sang TẤT CẢ thiết bị của mình & đối phương thông qua Built-in User Mapping
+            if (!string.IsNullOrEmpty(msg.ReceiverId))
+            {
+                await Clients.User(msg.ReceiverId).SendAsync("MessageRevoked", messageId);
+            }
+            await Clients.User(msg.SenderId).SendAsync("MessageRevoked", messageId);
         }
 
         // === TÍNH NĂNG [ĐÃ XEM] ===
         public async Task MarkAsRead(Guid messageId, string senderOfMessageId)
         {
             var myId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value 
-                          ?? Context.User?.FindFirst("sub")?.Value;
+                           ?? Context.User?.FindFirst("sub")?.Value;
 
             var msg = await _context.ChatMessages.FindAsync(messageId);
             if (msg == null || msg.ReceiverId != myId) return; // Kháng lỗi: Chỉ update khi mình là Thằng Nhận
@@ -137,20 +129,16 @@ namespace ChatService.Api.Hubs
             await _context.SaveChangesAsync();
 
             // Bắn tia "Đã xem" ngược về thiết bị của Người Gửi (Báo nó biết là dòng này đã bị Seen!)
-            var senderConnections = await _tracker.GetConnectionsForUser(senderOfMessageId);
-            if (senderConnections.Length > 0)
-                await Clients.Clients(senderConnections).SendAsync("MessageRead", messageId);
+            await Clients.User(senderOfMessageId).SendAsync("MessageRead", messageId);
         }
 
         // === TÍNH NĂNG [ĐANG GÕ...] ===
         public async Task TypingToggled(string receiverId, bool isTyping)
         {
             var myId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value 
-                          ?? Context.User?.FindFirst("sub")?.Value;
-                          
-            var receiverConnections = await _tracker.GetConnectionsForUser(receiverId);
-            if (receiverConnections.Length > 0)
-                await Clients.Clients(receiverConnections).SendAsync("UserTyping", myId, isTyping);
+                           ?? Context.User?.FindFirst("sub")?.Value;
+                           
+            await Clients.User(receiverId).SendAsync("UserTyping", myId, isTyping);
         }
 
         // === TÍNH NĂNG CHAT NHÓM (GROUP CHAT) ===
@@ -166,6 +154,9 @@ namespace ChatService.Api.Hubs
             var senderId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value 
                           ?? Context.User?.FindFirst("sub")?.Value;
             if (string.IsNullOrEmpty(senderId)) return null;
+
+            // Kiểm duyệt nội dung tin nhắn tránh spam hoặc lỗi
+            if (string.IsNullOrWhiteSpace(messageContent) || messageContent.Length > 2000) return null;
 
             // Vành Đai Mới: Quét DB xem có đúng nó là Môn đệ của Bang chúa không? Kẻo hacker fake lệnh!
             var isMember = await _context.GroupMembers.AnyAsync(gm => gm.GroupId == groupName && gm.UserId == senderId && gm.IsPendingApproval == false);
@@ -197,25 +188,45 @@ namespace ChatService.Api.Hubs
                           ?? Context.User?.FindFirst("sub")?.Value;
             if (string.IsNullOrEmpty(userId)) return;
 
-            var query = _context.ChatMessages
-                .Where(m => m.ReceiverId == userId || m.SenderId == userId);
-                
-            if (lastMessageTime.HasValue)
-            {
-                // Móc SẠCH SẼ các tin nhắn (riêng tư) người khác gửi tới trong quãng thời gian nó bị rớt mạng tới nay
-                query = query.Where(m => m.SentAt > lastMessageTime.Value);
-            }
-            else
-            {
-                query = query.Take(0); // Nếu ko đưa mốc thời gian thì ko bù tin nào sất (hoặc móc lịch sử bình thường)
-            }
-            
-            var missedMessages = await query.OrderBy(m => m.SentAt).ToListAsync();
+            if (!lastMessageTime.HasValue) return;
+
+            // 1. Quét xem user này đang thuộc những nhóm (Group) hợp lệ nào
+            var myGroups = await _context.GroupMembers
+                .Where(gm => gm.UserId == userId && gm.IsPendingApproval == false)
+                .Select(gm => gm.GroupId)
+                .ToListAsync();
+
+            // 2. Móc sạch sẽ các tin nhắn (riêng tư hoặc nhóm) phát sinh sau mốc thời gian mất kết nối
+            var missedMessages = await _context.ChatMessages
+                .Where(m => (m.ReceiverId == userId || m.SenderId == userId || (m.GroupName != null && myGroups.Contains(m.GroupName))) 
+                            && m.SentAt > lastMessageTime.Value)
+                .OrderBy(m => m.SentAt)
+                .ToListAsync();
 
             if (missedMessages.Any())
             {
+                // Điền thông tin Người Gửi (DisplayName, Avatar) để frontend hiển thị chính xác
+                var senderIds = missedMessages.Select(m => m.SenderId).Distinct().ToList();
+                var senders = await _context.Users
+                    .Where(u => senderIds.Contains(u.Id))
+                    .ToDictionaryAsync(u => u.Id, u => new { u.DisplayName, u.AvatarUrl });
+
+                var result = missedMessages.Select(m => new {
+                    id = m.Id,
+                    senderId = m.SenderId,
+                    senderName = senders.TryGetValue(m.SenderId, out var s) ? s.DisplayName : "Ai đó...",
+                    senderAvatar = senders.TryGetValue(m.SenderId, out var sa) ? sa.AvatarUrl : "",
+                    receiverId = m.ReceiverId,
+                    groupName = m.GroupName,
+                    content = m.Content,
+                    sentAt = m.SentAt,
+                    isMine = m.SenderId == userId,
+                    isRevoked = m.IsRevoked,
+                    isRead = m.IsRead
+                }).ToList();
+
                 // Bơm nguyên 1 cục Bù Đắp dội ngược xuống giao diện rớt mạng của kẻ ngắt kết nối
-                await Clients.Caller.SendAsync("ReceiveMissedMessages", missedMessages);
+                await Clients.Caller.SendAsync("ReceiveMissedMessages", result);
             }
         }
     }

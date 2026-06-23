@@ -38,10 +38,24 @@ function App() {
   
   const targetIdRef = useRef('');
   targetIdRef.current = targetId;
+  const chatTypeRef = useRef('direct');
+  chatTypeRef.current = chatType;
   const userRef = useRef(null);
   userRef.current = user;
+  const lastActiveTimeRef = useRef(new Date());
 
   const [typingUsers, setTypingUsers] = useState({});
+
+  // Toast & Modal UI/UX State
+  const [toast, setToast] = useState(null); // { message, type: 'success' | 'error' | 'warning' }
+  const [customModal, setCustomModal] = useState({ show: false, type: '', title: '', placeholder: '', value: '', callback: null, message: '', buttonText: '' });
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast(null);
+    }, 3000);
+  };
 
   // ---------- 1. LOGIN / LOGOUT ----------
   const handleLoginSuccess = async (credentialResponse) => {
@@ -128,57 +142,110 @@ function App() {
   const sendFriendRequest = async (id) => {
       try {
           await axios.post(`${API_BASE_URL}/api/friends/request/${id}`, {}, { headers: { Authorization: `Bearer ${token}` }});
-          alert("Tuyệt vời! Lời mời đã được xịt đi!");
+          showToast("Tuyệt vời! Lời mời kết bạn đã được gửi đi!", "success");
           setSearchQuery(''); // Xoá ô search
-      } catch(e) { alert(e.response?.data || "Lỗi"); }
+      } catch(e) { 
+          showToast(e.response?.data || "Có lỗi xảy ra khi kết bạn!", "error"); 
+      }
   }
 
   const acceptFriendRequest = async (friendshipId) => {
       try {
           await axios.post(`${API_BASE_URL}/api/friends/accept/${friendshipId}`, {}, { headers: { Authorization: `Bearer ${token}` }});
+          showToast("Trở thành bạn bè thành công!", "success");
           loadContacts();
       } catch(e) { console.error(e); }
   }
 
-  const createGroup = async () => {
-      const gName = window.prompt("Nhập Tên Bang Phái của bạn:");
-      if (!gName) return;
-      try {
-          const res = await axios.post(`${API_BASE_URL}/api/groups/create`, `"${gName}"`, { 
-              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
-          });
-          alert(`Chúc mừng! Mã bí mật của phòng là: ${res.data.groupId}. Hãy gửi mã này cho anh em để xin vào nhóm!`);
-          loadContacts();
-      } catch(e) { console.error(e); }
-  }
-
-  const requestJoinGroup = async () => {
-      const gId = window.prompt("Nhập Mã Nhóm (Ví dụ HD82JDM):");
-      if (!gId) return;
-      try {
-          const check = await axios.get(`${API_BASE_URL}/api/groups/search/${gId}`, { headers: { Authorization: `Bearer ${token}` }});
-          if(check.data) {
-              if (check.data.joinStatus === 1) alert("Sếp đã ở trong nhóm này rồi cơ mà!");
-              else if (check.data.joinStatus === 0) alert("Đã nộp đơn rồi sếp ơi, đợi Admin duyệt đi!");
-              else {
-                  if(window.confirm(`Tìm thấy nhóm: ${check.data.name}. Nộp đơn nhập hộ khẩu?`)) {
-                      await axios.post(`${API_BASE_URL}/api/groups/join/${gId}`, {}, { headers: { Authorization: `Bearer ${token}` }});
-                      alert("Đã gõ cửa. Việc còn lại do số phận!");
-                  }
+  const createGroup = () => {
+      setCustomModal({
+          show: true,
+          type: 'prompt',
+          title: '🏕️ Lập Bang (Tạo Nhóm Mới)',
+          placeholder: 'Nhập Tên Bang Phái của bạn...',
+          value: '',
+          message: '',
+          buttonText: 'Lập Bang',
+          callback: async (gName) => {
+              if (!gName || !gName.trim()) return;
+              try {
+                  const res = await axios.post(`${API_BASE_URL}/api/groups/create`, `"${gName}"`, { 
+                      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+                  });
+                  setCustomModal({
+                      show: true,
+                      type: 'alert',
+                      title: '🎉 Lập Bang Thành Công!',
+                      message: `Mã bí mật của phòng là: ${res.data.groupId}. Hãy gửi mã này cho anh em để xin vào nhóm!`,
+                      buttonText: 'Sao chép & Đóng',
+                      callback: () => {
+                          navigator.clipboard.writeText(res.data.groupId);
+                          showToast("Đã sao chép mã nhóm!", "success");
+                          loadContacts();
+                      }
+                  });
+              } catch(e) { 
+                  console.error(e);
+                  showToast("Lập bang thất bại!", "error");
               }
           }
-      } catch(e) { alert("Mã nhóm sai bét hoặc ổ nhện không tồn tại!"); }
+      });
+  }
+
+  const requestJoinGroup = () => {
+      setCustomModal({
+          show: true,
+          type: 'prompt',
+          title: '🕵️ Xin Lót Ổ (Xin Vào Nhóm)',
+          placeholder: 'Nhập Mã Nhóm (Ví dụ: HD82JDM)...',
+          value: '',
+          message: '',
+          buttonText: 'Tìm Kiếm',
+          callback: async (gId) => {
+              if (!gId || !gId.trim()) return;
+              try {
+                  const check = await axios.get(`${API_BASE_URL}/api/groups/search/${gId.trim()}`, { headers: { Authorization: `Bearer ${token}` }});
+                  if(check.data) {
+                      if (check.data.joinStatus === 1) {
+                          showToast("Sếp đã ở trong nhóm này rồi cơ mà!", "warning");
+                      } else if (check.data.joinStatus === 0) {
+                          showToast("Đã nộp đơn rồi sếp ơi, đợi Admin duyệt đi!", "warning");
+                      } else {
+                          setCustomModal({
+                              show: true,
+                              type: 'confirm',
+                              title: `Gia nhập nhóm: ${check.data.name}`,
+                              message: `Tìm thấy nhóm: ${check.data.name}. Nộp đơn nhập hộ khẩu?`,
+                              buttonText: 'Nộp Đơn',
+                              callback: async () => {
+                                  try {
+                                      await axios.post(`${API_BASE_URL}/api/groups/join/${gId.trim()}`, {}, { headers: { Authorization: `Bearer ${token}` }});
+                                      showToast("Đã gửi đơn! Vui lòng chờ Trưởng phòng duyệt.", "success");
+                                  } catch (err) {
+                                      showToast("Gửi đơn thất bại!", "error");
+                                  }
+                              }
+                          });
+                      }
+                  }
+              } catch(e) { 
+                  showToast("Mã nhóm sai bét hoặc ổ nhện không tồn tại!", "error"); 
+              }
+          }
+      });
   }
 
   const approveGroupRequest = async (groupId, userId) => {
       try {
           await axios.post(`${API_BASE_URL}/api/groups/${groupId}/approve/${userId}`, {}, { headers: { Authorization: `Bearer ${token}` }});
           loadContacts();
-          alert("Đã duyệt biên chế thành công!");
-      } catch(e) { console.log(e); }
+          showToast("Đã thu nhận thành viên thành công!", "success");
+      } catch(e) { 
+          console.log(e);
+          showToast("Duyệt thành viên thất bại!", "error");
+      }
   }
 
-  // ---------- 5. MỞ KHÓA LỊCH SỬ CHAT ----------
   const openChatContext = async (id, name, type, fStatus = 1) => {
     setTargetId(id);
     setTargetName(name);
@@ -195,26 +262,67 @@ function App() {
             content: m.content, sentAt: m.sentAt, isMine: m.senderId === user.id, isRevoked: m.isRevoked, isRead: m.isRead
         }));
         setMessages(historyMapped);
+        lastActiveTimeRef.current = new Date();
     } catch(e) { console.log(e); }
   };
 
   // ---------- 6. SIGNALR WEBSOCKET ----------
   useEffect(() => {
-    if (token && user) {
+    if (token) {
       const newConnection = new signalR.HubConnectionBuilder()
         .withUrl(`${API_BASE_URL}/chathub`, { accessTokenFactory: () => token })
         .withAutomaticReconnect()
         .build();
 
       newConnection.on("ReceivePrivateMessage", (id, senderId, messageContent, sentAt, isRevoked, isRead) => {
-        setMessages(prev => [...prev, { id, senderId, content: messageContent, sentAt, isMine: false, isRevoked, isRead }]);
+        lastActiveTimeRef.current = new Date(sentAt);
+        setMessages(prev => {
+          if (prev.some(m => m.id === id)) return prev;
+          const isMine = senderId === userRef.current?.id;
+          return [...prev, { id, senderId, content: messageContent, sentAt, isMine, isRevoked, isRead }];
+        });
         loadInbox();
       });
 
       newConnection.on("ReceiveGroupMessage", (id, groupName, senderId, senderName, senderAvatar, messageContent, sentAt, isRevoked, isRead) => {
+         lastActiveTimeRef.current = new Date(sentAt);
          if (targetIdRef.current === groupName) {
-             setMessages(prev => [...prev, { id, senderId, senderName, senderAvatar, content: messageContent, sentAt, isMine: senderId === userRef.current.id, isRevoked, isRead }]);
+             setMessages(prev => {
+                 if (prev.some(m => m.id === id)) return prev;
+                 const isMine = senderId === userRef.current?.id;
+                 return [...prev, { id, senderId, senderName, senderAvatar, content: messageContent, sentAt, isMine, isRevoked, isRead }];
+             });
          }
+      });
+
+      newConnection.on("ReceiveMissedMessages", (missedMessages) => {
+        setMessages(prev => {
+          let updated = [...prev];
+          let changed = false;
+          missedMessages.forEach(msg => {
+            const isForCurrentChat = (chatTypeRef.current === 'group' && msg.groupName === targetIdRef.current) ||
+                                     (chatTypeRef.current === 'direct' && (msg.senderId === targetIdRef.current || msg.receiverId === targetIdRef.current));
+            
+            if (isForCurrentChat) {
+              if (!updated.some(m => m.id === msg.id)) {
+                updated.push({
+                  id: msg.id,
+                  senderId: msg.senderId,
+                  senderName: msg.senderName,
+                  senderAvatar: msg.senderAvatar,
+                  content: msg.content,
+                  sentAt: msg.sentAt,
+                  isMine: msg.senderId === userRef.current?.id,
+                  isRevoked: msg.isRevoked,
+                  isRead: msg.isRead
+                });
+                changed = true;
+              }
+            }
+          });
+          return changed ? updated.sort((a, b) => new Date(a.sentAt) - new Date(b.sentAt)) : prev;
+        });
+        loadInbox();
       });
 
       newConnection.on("MessageRevoked", (messageId) => {
@@ -230,11 +338,15 @@ function App() {
         setTypingUsers(prev => ({ ...prev, [userId]: isTyping }));
       });
 
+      newConnection.onreconnected(() => {
+        newConnection.invoke("SyncMissedMessages", lastActiveTimeRef.current).catch(console.error);
+      });
+
       newConnection.start().catch(err => console.error(err));
       setConnection(newConnection);
       return () => newConnection.stop();
     }
-  }, [token, user]);
+  }, [token]);
 
   useEffect(() => {
     if (messages.length > 0 && targetId && chatType === 'direct') {
@@ -246,10 +358,23 @@ function App() {
     }
   }, [messages, connection, targetId, chatType]);
 
-  const revokeMessage = async (msgId) => {
-      if (window.confirm("Huỷ diệt tin nhắn này khỏi vũ trụ?")) {
-          try { await connection.invoke("RevokeMessage", msgId); } catch(e) { console.error(e); }
-      }
+  const revokeMessage = (msgId) => {
+      setCustomModal({
+          show: true,
+          type: 'confirm',
+          title: '⚠️ Thu Hồi Tin Nhắn',
+          message: 'Bạn có chắc chắn muốn hủy diệt tin nhắn này khỏi vũ trụ không?',
+          buttonText: 'Thu Hồi',
+          callback: async () => {
+              try { 
+                  await connection.invoke("RevokeMessage", msgId); 
+                  showToast("Đã thu hồi tin nhắn!", "success");
+              } catch(e) { 
+                  console.error(e); 
+                  showToast("Không thể thu hồi tin nhắn!", "error");
+              }
+          }
+      });
   };
 
   const sendMessage = async () => {
@@ -327,12 +452,19 @@ function App() {
                     ))
                 ) : (
                     inbox.map(ib => (
-                    <div key={ib.targetId} className="inbox-item" onClick={() => openChatContext(ib.targetId, ib.name, 'direct', 1)}>
+                    <div key={ib.targetId} className={`inbox-item ${targetId === ib.targetId ? 'active' : ''}`} onClick={() => openChatContext(ib.targetId, ib.name, ib.chatType, 1)}>
                         <img src={ib.avatar} alt="ava" />
                         <div className="inbox-info">
-                        <div className="inbox-name">{ib.name}</div>
+                        <div className="inbox-name">
+                            {ib.chatType === 'group' ? '👥 ' : ''}{ib.name}
+                        </div>
                         <div className="inbox-preview">
-                            {ib.lastMessage?.content?.length > 25 ? ib.lastMessage.content.substring(0,25) + "..." : ib.lastMessage?.content}
+                            {ib.lastMessage ? (
+                                ib.lastMessage.isRevoked ? "⚠️ Tin nhắn đã bị thu hồi" :
+                                (ib.lastMessage.content?.length > 25 ? ib.lastMessage.content.substring(0, 25) + "..." : ib.lastMessage.content)
+                            ) : (
+                                <span style={{fontStyle: 'italic', color: '#999'}}>Chưa có tin nhắn nào...</span>
+                            )}
                         </div>
                         </div>
                     </div>
@@ -462,6 +594,68 @@ function App() {
           <button onClick={sendMessage}>Bắn</button>
         </div>
       </div>
+
+      {/* 🚀 CUSTOM TOAST NOTIFICATION */}
+      {toast && (
+        <div className={`custom-toast ${toast.type}`}>
+          <div className="toast-icon">
+            {toast.type === 'success' ? '✅' : toast.type === 'error' ? '❌' : '⚠️'}
+          </div>
+          <div className="toast-message">{toast.message}</div>
+        </div>
+      )}
+
+      {/* 🚀 CUSTOM DIALOG MODAL */}
+      {customModal.show && (
+        <div className="modal-overlay">
+          <div className="modal-card">
+            <div className="modal-header">
+              <h3>{customModal.title}</h3>
+              <button className="modal-close-btn" onClick={() => setCustomModal(prev => ({ ...prev, show: false }))}>&times;</button>
+            </div>
+            <div className="modal-body">
+              {customModal.message && <p className="modal-message">{customModal.message}</p>}
+              
+              {customModal.type === 'prompt' && (
+                <input 
+                  type="text" 
+                  className="modal-input"
+                  placeholder={customModal.placeholder}
+                  value={customModal.value}
+                  onChange={(e) => setCustomModal(prev => ({ ...prev, value: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      customModal.callback(customModal.value);
+                      setCustomModal(prev => ({ ...prev, show: false }));
+                    }
+                  }}
+                  autoFocus
+                />
+              )}
+            </div>
+            <div className="modal-footer">
+              {customModal.type !== 'alert' && (
+                <button className="modal-cancel-btn" onClick={() => setCustomModal(prev => ({ ...prev, show: false }))}>
+                  Hủy
+                </button>
+              )}
+              <button 
+                className="modal-confirm-btn" 
+                onClick={() => {
+                  if (customModal.type === 'prompt') {
+                    customModal.callback(customModal.value);
+                  } else {
+                    customModal.callback();
+                  }
+                  setCustomModal(prev => ({ ...prev, show: false }));
+                }}
+              >
+                {customModal.buttonText || 'Xác nhận'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
